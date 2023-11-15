@@ -23,7 +23,7 @@ void encode_read(const char* read, size_t length, EncodedBase* encoded_read) {
     for (int i = 0; i < length; i++) encoded_read[i].value = encode_base(read[i]).value;
 }
 
-uint64_t read_file(const char *filePath) {
+uint64_t* read_file(const char *filePath) {
     FILE *file = fopen(filePath, "r"); // Open the file for reading
     if (file == NULL) {
         perror("Error opening file");
@@ -34,6 +34,15 @@ uint64_t read_file(const char *filePath) {
     size_t len = 0;
     ssize_t read;
     uint64_t result = 0;
+    size_t kmer_size = 32;
+    uint64_t base_kmer_addr = 0;
+    uint64_t* addresses_to_search = new uint64_t[kmer_size * 2];
+
+    uint64_t precomputed_offsets[64];
+    for (size_t j = 0; j < 64; j++) {
+        precomputed_offsets[j] = 2 * j;
+    }
+
 
     EncodedBase*  encoded_read = new EncodedBase[1000];
     size_t line_number = 0;
@@ -42,28 +51,31 @@ uint64_t read_file(const char *filePath) {
             continue; // Skip all lines that are not reads
         }
         encode_read(line, len, encoded_read);
-        size_t num_kmers = len - 32 + 1;
-        for (size_t i = 0; i < num_kmers; i++) {
-            uint64_t kmer_value = 0;
-            for (size_t j = 0; j < 32; j += 4) {
-                // Process four bases at a time
-                kmer_value = (kmer_value << 8) | 
-                             (encoded_read[i + j].value << 6) |
-                             (encoded_read[i + j + 1].value << 4) |
-                             (encoded_read[i + j + 2].value << 2) |
-                             encoded_read[i + j + 3].value;
-            }
-            // Now kmer_value holds the 64-bit representation of the k-mer
-            // Process kmer_value as needed
-            result += kmer_value;
+        size_t num_kmers = len - kmer_size + 1;
+        // Assuming you have a precomputed table for offsets
+    // uint64_t precomputed_offsets[64];
+
+    for (size_t i = 0; i < num_kmers; i++) {
+        uint64_t kmer_value = 0;
+        for (size_t j = 0; j < kmer_size; j += 4) {
+            kmer_value = (kmer_value << 8) | 
+                        (encoded_read[i + j].value << 6) |
+                        (encoded_read[i + j + 1].value << 4) |
+                        (encoded_read[i + j + 2].value << 2) |
+                        encoded_read[i + j + 3].value;
         }
+
+        for (size_t j = 0; j < 64; j++) {
+            addresses_to_search[j] += base_kmer_addr + precomputed_offsets[j] + ((kmer_value >> j) & 1);
+        }
+    }
 
     }
     delete[] encoded_read;
 
     free(line); // Free the allocated buffer
     fclose(file); // Close the file
-    return result;
+    return addresses_to_search;
 }
 
 
